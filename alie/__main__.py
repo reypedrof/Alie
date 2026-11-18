@@ -33,8 +33,8 @@ def parser():
     duration.add_argument("--rounds", type=int, default=3, help="Total de varreduras, recarregando a página entre elas (padrão: 3)")
     duration.add_argument("--loop", action="store_true", help="Continuar as varreduras até receber uma interrupção")
     scan.add_argument("--round-pause", type=float, default=30, help="Espera em segundos entre rodadas no modo contínuo")
-    scan.add_argument("--max-scrolls", type=int, default=100, help="Máximo de rolagens por rodada")
-    scan.add_argument("--idle-rounds", type=int, default=6, help="Etapas seguidas sem novidades para encerrar uma rodada")
+    scan.add_argument("--max-scrolls", type=int, help="Teto opcional de rolagens por rodada. Por padrão, vai até o fim da página")
+    scan.add_argument("--idle-rounds", type=int, default=6, help="Etapas sem novos resultados no fim da página")
     scan.add_argument("--delay", type=float, default=3, help="Espera em segundos após cada rolagem ou recarga")
     scan.add_argument("--selector", help="Seletor CSS dos cartões, caso o layout mude")
     scan.add_argument("--debug", action="store_true", help="Salvar cartões brutos e captura da página")
@@ -91,7 +91,7 @@ def main():
     parsed = urlparse(args.url)
     if parsed.scheme != "https" or not (parsed.hostname == "aliexpress.com" or (parsed.hostname or "").endswith(".aliexpress.com")):
         root.error("Use uma URL HTTPS do AliExpress")
-    if args.max_scrolls < 0 or args.idle_rounds < 1 or not math.isfinite(args.delay) or args.delay < 1:
+    if (args.max_scrolls is not None and args.max_scrolls < 0) or args.idle_rounds < 1 or not math.isfinite(args.delay) or args.delay < 1:
         root.error("Use max-scrolls >= 0, idle-rounds >= 1 e delay >= 1 segundo")
     if args.rounds < 1:
         root.error("Use rounds >= 1")

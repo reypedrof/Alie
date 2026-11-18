@@ -100,8 +100,8 @@ docker compose run --rm collector scan --min-percent 95 --min-discount 100,00
 # Fazer cinco varreduras da central com quatro recargas entre elas.
 docker compose run --rm collector scan --rounds 5 --min-percent 90
 
-# Página de outro evento, mais rolagens e carregamento mais lento.
-docker compose run --rm collector scan --url 'https://www.aliexpress.com/ssr/300003448/glo-coupon-center-8ymmrs' --max-scrolls 200 --delay 5
+# Página de outro evento ou carregamento mais lento.
+docker compose run --rm collector scan --url 'https://www.aliexpress.com/ssr/300003448/glo-coupon-center-8ymmrs' --delay 5
 
 # Sessão já configurada; inicia sem esperar Enter.
 docker compose run --rm collector scan --no-prompt --min-percent 90
@@ -145,9 +145,11 @@ da página antes de ler os cartões. Se o botão não responder, rode sem
 `--no-prompt`, feche o painel no navegador em `http://localhost:7900` e só depois
 pressione Enter no terminal.
 
-Cada rodada termina após 100 rolagens ou seis etapas seguidas sem novos cartões e
-sem crescimento da página. A espera padrão após cada rolagem ou recarga é de
-três segundos. Não há tentativa de
+Por padrão, cada rodada percorre a página inteira antes de recarregar. Ao chegar
+ao fim, o coletor procura o aviso “Resultados carregados” ou aguarda seis etapas
+sem novos cartões nem crescimento da página. A espera padrão por etapa é de três
+segundos. Use `--max-scrolls` só para limitar deliberadamente uma coleta curta.
+Não há tentativa de
 contornar CAPTCHA. Se a central exigir uma ação manual, interrompa, ajuste no
 navegador durante a próxima execução e retome a coleta.
 

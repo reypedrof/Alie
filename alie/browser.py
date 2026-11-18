@@ -66,11 +66,12 @@ def connect(remote_url):
     return driver
 
 
-def collect_round(driver, args, storage, run_id, script, seen, raw):
+def collect_round(driver, args, storage, run_id, script, scroll, seen, raw):
     round_cards = set()
     idle = 0
+    scrolls = 0
     previous = None
-    for step in range(args.max_scrolls + 1):
+    for step in count():
         dismiss_login_drawer(driver, wait_for_appearance=(step == 0))
         cards = driver.execute_script(script, args.selector)
         before = len(seen)
@@ -88,29 +89,33 @@ def collect_round(driver, args, storage, run_id, script, seen, raw):
         if coupons:
             storage.save_many(run_id, coupons.values())
         fresh = len(seen) - before
-        # Encerrar por ausência de novos cartões brutos; ofertas rejeitadas também
-        # podem ocupar várias páginas antes de aparecer um cupom suportado.
-        print(f"Etapa {step:03}: {len(cards)} cartões visíveis, +{fresh} cupons, {len(seen)} únicos.", flush=True)
-        state = (len(round_cards), driver.execute_script("return document.documentElement.scrollHeight"))
-        if state == previous:
-            idle += 1
-        else:
-            idle = 0
+        position = driver.execute_script(scroll, "measure")
+        offset, max_offset = position["offset"], position["maxOffset"]
+        print(f"Etapa {step:03}: posição {offset}/{max_offset} px, {len(cards)} cartões, "
+              f"+{fresh} cupons, {len(seen)} únicos.", flush=True)
+        state = (offset, max_offset, len(round_cards))
+        idle = idle + 1 if state == previous else 0
         previous = state
-        if idle >= args.idle_rounds or step >= args.max_scrolls:
-            break
-        driver.execute_script("""
-          const els = [document.scrollingElement, ...document.querySelectorAll('main, section, div')];
-          const scrollable = els.filter(el => el && el.clientHeight > 150 &&
-            el.scrollHeight > el.clientHeight + 50 &&
-            (el === document.scrollingElement || /auto|scroll/.test(getComputedStyle(el).overflowY)));
-          for (const el of scrollable) el.scrollBy(0, Math.max(500, el.clientHeight * 0.8));
-        """)
+        if position["endMarker"]:
+            print("Fim da página confirmado pelo aviso 'Resultados carregados'.", flush=True)
+            return
+        if idle >= args.idle_rounds:
+            if position["atBottom"]:
+                print("Fim da página confirmado após esperar por novos resultados.", flush=True)
+                return
+            raise RuntimeError("A rolagem parou antes do fim da página. Confira a central no navegador.")
+        if not position["atBottom"]:
+            if args.max_scrolls is not None and scrolls >= args.max_scrolls:
+                print("Limite de rolagens atingido. A rodada pode estar incompleta.", flush=True)
+                return
+            driver.execute_script(scroll, "advance")
+            scrolls += 1
         time.sleep(args.delay)
 
 
 def collect(driver, args, storage, run_id, publish_round):
     script = Path(__file__).with_name("extract.js").read_text(encoding="utf-8")
+    scroll = Path(__file__).with_name("scroll.js").read_text(encoding="utf-8")
     seen = set()
     raw = {}
     rounds = count(1) if args.loop else range(1, args.rounds + 1)
@@ -124,9 +129,9 @@ def collect(driver, args, storage, run_id, publish_round):
             driver.execute_script("history.scrollRestoration = 'manual'")
             driver.refresh()
             time.sleep(args.delay)
-            driver.execute_script("window.scrollTo(0, 0)")
+        driver.execute_script(scroll, "top")
         before = len(seen)
-        collect_round(driver, args, storage, run_id, script, seen, raw)
+        collect_round(driver, args, storage, run_id, script, scroll, seen, raw)
         print(f"Rodada {number} concluída. {len(seen) - before} novos cupons, {len(seen)} no total.", flush=True)
         storage.complete_round(run_id, number)
         publish_round()
