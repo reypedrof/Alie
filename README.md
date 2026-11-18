@@ -4,8 +4,8 @@ Busca cupons em reais na central do AliExpress, calcula desconto/mínimo e prior
 percentual alto, com desempate por maior desconto nominal. Sem IA, assinatura ou
 API comercial. O Chromium, o coletor e as dependências rodam em Docker.
 
-O objetivo é localizar candidatos para montar as combinações descritas em `2.txt`:
-valor inicial alto e valor baixo após cupom de loja. Esta versão coleta **cupons**;
+O objetivo é localizar candidatos com valor inicial alto e valor baixo após o
+cupom de loja. Esta versão coleta **cupons**;
 ainda não pesquisa produtos elegíveis, não detecta agrupamento Choice e não gera
 pedidos. A seleção do produto e o pagamento separado continuam manuais.
 
@@ -46,7 +46,6 @@ do volume. Os comandos abaixo não removem o volume nem o histórico:
 docker compose stop browser
 docker compose up -d --force-recreate browser
 docker compose build collector
-docker compose run --rm -e ALIE_BROWSER_TESTS=1 --entrypoint python collector -m unittest discover -v
 docker compose run --rm collector scan --min-percent 90 --debug
 ```
 
@@ -113,18 +112,7 @@ sem crescimento da página, com três segundos entre rodadas. Não há tentativa
 contornar CAPTCHA. Se a central exigir uma ação manual, interrompa, ajuste no
 navegador durante a próxima execução e retome a coleta.
 
-## Testes e demonstração sem conta
-
-```bash
-docker compose run --rm --no-deps --entrypoint python collector -m unittest discover -v
-
-# Integração com Chromium real, usando uma página fictícia local (sem AliExpress).
-docker compose up -d browser
-docker compose run --rm -e ALIE_BROWSER_TESTS=1 --entrypoint python collector -m unittest discover -v
-
-# Dados FICTÍCIOS dos testes: valida importação e exportação sem login/rede.
-docker compose run --rm --no-deps collector import-cards /app/tests/fixtures/cards.json --min-percent 90
-```
+## Reprocessar uma coleta
 
 Para reprocessar uma captura real do modo debug:
 

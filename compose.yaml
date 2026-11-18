@@ -1,0 +1,51 @@
+services:
+  profile-init:
+    image: selenium/standalone-chromium:4.52.0-20261101
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        chown -R "$$(id -u seluser):$$(id -g seluser)" /profile
+        chmod u+rwx /profile
+    volumes:
+      - browser-profile:/profile
+    restart: "no"
+
+  browser:
+    image: selenium/standalone-chromium:4.52.0-20261101
+    shm_size: 2gb
+    ports:
+      - "127.0.0.1:7900:7900"
+    environment:
+      SE_VNC_NO_PASSWORD: "true"
+      SE_NODE_MAX_SESSIONS: "1"
+      SE_NODE_SESSION_TIMEOUT: "7200"
+      SE_SCREEN_WIDTH: "1440"
+      SE_SCREEN_HEIGHT: "1000"
+    volumes:
+      - browser-profile:/home/seluser/alie-profile
+    depends_on:
+      profile-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "test -w /home/seluser/alie-profile && curl -fsS http://localhost:4444/status"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  collector:
+    build: .
+    environment:
+      SELENIUM_URL: http://browser:4444
+      ALIE_DATA_DIR: /data
+    volumes:
+      - ./data:/data:Z
+    stdin_open: true
+    tty: true
+    depends_on:
+      browser:
+        condition: service_healthy
+
+volumes:
+  browser-profile:

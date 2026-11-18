@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+/data/*
+!/data/.gitkeep
+.env
+.env.*
+/.agents/
+/.aws/
+/.codex/
+/2.txt
+/dificuldade.txt
+/message.txt
+/message(1).txt
+/image.png
+/image1.png
+/image2.png
+/tests/
