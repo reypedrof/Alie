@@ -40,12 +40,21 @@ services:
       SELENIUM_URL: http://browser:4444
       ALIE_DATA_DIR: /data
     volumes:
-      - ./data:/data:Z
+      - ./data:/data:z
     stdin_open: true
     tty: true
     depends_on:
       browser:
         condition: service_healthy
+
+  report:
+    build: .
+    entrypoint: ["python", "-m", "alie.server"]
+    ports:
+      - "127.0.0.1:8780:8780"
+    volumes:
+      - ./data:/data:ro,z
+    restart: unless-stopped
 
 volumes:
   browser-profile:

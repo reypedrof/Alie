@@ -2,6 +2,7 @@ import argparse
 import json
 import math
 import os
+import signal
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -28,9 +29,13 @@ def parser():
     scan.add_argument("--url", default=DEFAULT_URL)
     scan.add_argument("--selenium-url", default=os.environ.get("SELENIUM_URL", "http://browser:4444"))
     scan.add_argument("--no-prompt", action="store_true", help="Usar sessão já configurada, sem aguardar Enter")
-    scan.add_argument("--max-scrolls", type=int, default=100)
-    scan.add_argument("--idle-rounds", type=int, default=6)
-    scan.add_argument("--delay", type=float, default=3)
+    duration = scan.add_mutually_exclusive_group()
+    duration.add_argument("--rounds", type=int, default=3, help="Total de varreduras, recarregando a página entre elas (padrão: 3)")
+    duration.add_argument("--loop", action="store_true", help="Continuar as varreduras até receber uma interrupção")
+    scan.add_argument("--round-pause", type=float, default=30, help="Espera em segundos entre rodadas no modo contínuo")
+    scan.add_argument("--max-scrolls", type=int, default=100, help="Máximo de rolagens por rodada")
+    scan.add_argument("--idle-rounds", type=int, default=6, help="Etapas seguidas sem novidades para encerrar uma rodada")
+    scan.add_argument("--delay", type=float, default=3, help="Espera em segundos após cada rolagem ou recarga")
     scan.add_argument("--selector", help="Seletor CSS dos cartões, caso o layout mude")
     scan.add_argument("--debug", action="store_true", help="Salvar cartões brutos e captura da página")
     imp = sub.add_parser("import-cards", help="Reprocessar JSON de cartões sem abrir navegador")
@@ -45,14 +50,14 @@ def parser():
     return root
 
 
-def show(storage, args, run_id=None):
+def show(storage, args, run_id=None, *, list_coupons=True):
     run_id, rows = storage.results(run_id, args.min_percent, money_cents(args.min_discount))
     if run_id is None or not storage.metadata(run_id):
         print("Coleta não encontrada.", file=sys.stderr)
         return 1
     directory = export(storage.directory, run_id, rows, storage.metadata(run_id))
     print(f"\n{len(rows)} candidatos nos filtros. Arquivos: {directory}")
-    for row in rows[:30]:
+    for row in rows[:30] if list_coupons else ():
         print(f'{row["percent"]:6.2f}% | {brl(row["discount_cents"])} / {brl(row["minimum_cents"])}'
               f' | {row["store"] or "loja não identificada"} | {row["store_url"]}')
     return 0
@@ -88,7 +93,16 @@ def main():
         root.error("Use uma URL HTTPS do AliExpress")
     if args.max_scrolls < 0 or args.idle_rounds < 1 or not math.isfinite(args.delay) or args.delay < 1:
         root.error("Use max-scrolls >= 0, idle-rounds >= 1 e delay >= 1 segundo")
+    if args.rounds < 1:
+        root.error("Use rounds >= 1")
+    if not math.isfinite(args.round_pause) or args.round_pause < 1:
+        root.error("Use round-pause >= 1 segundo")
     from .browser import collect, connect
+
+    def stop_scan(_signum, _frame):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, stop_scan)
     driver = None
     run_id = None
     exit_code = 0
@@ -107,7 +121,8 @@ def main():
         if current.scheme != "https" or not (current.hostname == "aliexpress.com" or (current.hostname or "").endswith(".aliexpress.com")):
             raise ValueError("O navegador precisa estar em uma página HTTPS do AliExpress")
         run_id = storage.start(driver.current_url)
-        count = collect(driver, args, storage, run_id)
+        count = collect(driver, args, storage, run_id,
+                        lambda: show(storage, args, run_id, list_coupons=False))
         storage.finish(run_id, "completed" if count else "no-coupons-detected")
     except (KeyboardInterrupt, EOFError):
         if run_id:

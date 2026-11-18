@@ -58,16 +58,33 @@ docker compose exec -T browser sh -ec 'id; ls -ld /home/seluser/alie-profile; te
 
 ## Resultados
 
+Para acompanhar o relatório mais recente no navegador, suba o servidor local:
+
+```bash
+docker compose up -d --build report
+```
+
+Abra **http://localhost:8780**. O servidor usa o relatório da coleta mais recente
+que já gerou HTML e atualiza a página automaticamente quando o arquivo muda.
+O serviço roda em separado do coletor e lê os relatórios em `data/`.
+O tema segue a preferência do sistema até você escolher **Modo escuro** no topo.
+
 Cada coleta tem sua própria pasta `data/run-N/`:
 
-- `report.html`: abra diretamente no navegador; tabela ordenada e links das lojas.
+- `report.html`: tabela com links das lojas e filtros por valor do cupom e por loja.
 - `coupons.csv`: planilha com separador `;`, UTF-8 com BOM.
 - `coupons.json`: campos monetários em centavos inteiros e metadados da coleta.
 - Com `--debug`: `cards.json` e `page.png`, úteis para adaptar o extrator ao layout.
 
 O banco fica em `data/coupons.sqlite3`. Os resultados são gravados a cada etapa;
 Ctrl+C preserva os cupons já encontrados e exporta uma coleta incompleta.
-As datas do histórico são UTC. O relatório não garante disponibilidade atual.
+O HTML exibe os horários de São Paulo. SQLite, CSV e JSON mantêm as datas de origem
+em UTC. O relatório não garante disponibilidade atual.
+
+Clique em um cabeçalho com seta para ordenar e clique novamente para inverter a
+ordem. A data usa a primeira observação disponível no SQLite, inclusive de coletas
+anteriores. Em registros antigos, a referência é a observação que já estava salva.
+Clique no código da coluna **Cupom** para copiá-lo.
 
 O campo “restante no mínimo” é **mínimo exigido menos desconto do cupom**. Não é
 o preço de um produto encontrado. Validade e restrições ficam no texto do cartão;
@@ -80,11 +97,17 @@ Cupons coletáveis sem código não têm um código inventado.
 # Buscar cupons a partir de 95%, com desconto nominal de pelo menos R$ 100.
 docker compose run --rm collector scan --min-percent 95 --min-discount 100,00
 
+# Fazer cinco varreduras da central com quatro recargas entre elas.
+docker compose run --rm collector scan --rounds 5 --min-percent 90
+
 # Página de outro evento, mais rolagens e carregamento mais lento.
 docker compose run --rm collector scan --url 'https://www.aliexpress.com/ssr/300003448/glo-coupon-center-8ymmrs' --max-scrolls 200 --delay 5
 
 # Sessão já configurada; inicia sem esperar Enter.
 docker compose run --rm collector scan --no-prompt --min-percent 90
+
+# Recarregar a central continuamente, com 30 segundos de pausa entre rodadas.
+docker compose run --rm --name alie-loop collector scan --loop --round-pause 30 --min-percent 90
 
 # Alterar o filtro de uma coleta salva, sem acessar o AliExpress.
 docker compose run --rm --no-deps collector export --run 1 --min-percent 99
@@ -107,8 +130,24 @@ Se o layout mudar, use `--debug`, examine `cards.json`/`page.png` e ajuste
 para selecionar explicitamente o contêiner de cada oferta. Depois reconstrua a
 imagem com `docker compose build collector`.
 
-O limite padrão é 100 rolagens ou seis rodadas consecutivas sem novos cartões e
-sem crescimento da página, com três segundos entre rodadas. Não há tentativa de
+Por padrão, cada coleta faz três varreduras, recarregando a página entre elas para
+buscar cupons diferentes. Os cupons únicos de todas as rodadas ficam no mesmo
+relatório. Use `--rounds 1` para fazer uma única varredura.
+
+Em `--loop`, o SQLite e os relatórios da mesma coleta são atualizados após cada
+rodada. A página em **http://localhost:8780** atualiza automaticamente e mantém
+a ordenação e os filtros da aba. Use `--no-prompt` se o perfil já estiver pronto.
+Para encerrar, pressione Ctrl+C ou rode `docker stop -t 30 alie-loop` em outro
+terminal. Cada nova execução inicia uma coleta com seu próprio relatório.
+
+Se a central abrir o painel lateral de login, o coletor fecha o painel pelo botão
+da página antes de ler os cartões. Se o botão não responder, rode sem
+`--no-prompt`, feche o painel no navegador em `http://localhost:7900` e só depois
+pressione Enter no terminal.
+
+Cada rodada termina após 100 rolagens ou seis etapas seguidas sem novos cartões e
+sem crescimento da página. A espera padrão após cada rolagem ou recarga é de
+três segundos. Não há tentativa de
 contornar CAPTCHA. Se a central exigir uma ação manual, interrompa, ajuste no
 navegador durante a próxima execução e retome a coleta.
 
